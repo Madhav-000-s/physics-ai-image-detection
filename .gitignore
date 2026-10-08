@@ -1,0 +1,7 @@
+# local run outputs (notebooks default to these when not on Kaggle)
+work/
+work02/
+work03/
+work04/
+__pycache__/
+.ipynb_checkpoints/
