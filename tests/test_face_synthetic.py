@@ -112,6 +112,20 @@ def test_pupil_shape():
     assert irr["face_pupil_irreg_mean"] > rnd["face_pupil_irreg_mean"] + 0.05
 
 
+def test_skin_gate_drops_hair_keeps_shadow():
+    n, inside = _sphere()
+    rgb = _render(n, [0.9, 0.1, 0.4])                 # strong side light: one side in deep shadow
+    rgb[:60] = (70, 45, 25)                           # dark-brown "hair" band over the top
+    skin = inside.copy()
+    gated = F.skin_colour_gate(rgb, skin)
+    hair = skin & (np.arange(S)[:, None] < 60)
+    lit = rgb.astype(float).mean(-1)
+    shadow = skin & ~hair & (lit <= np.percentile(lit[skin & ~hair], 25))
+    assert shadow.sum() > 500
+    assert gated[hair].mean() < 0.05                  # hair removed
+    assert gated[shadow].mean() > 0.9                 # shadowed skin kept (chromaticity ignores shading)
+
+
 def test_small_iris_is_nan():
     img, eyes = _eye_image([(0.4, -0.4)] * 2)
     for e in eyes:

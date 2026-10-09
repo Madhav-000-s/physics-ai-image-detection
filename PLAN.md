@@ -40,7 +40,7 @@ Optional later addition: **face vs. background lighting.** Use Marigold normals 
 
 | Phase | Work | Go / no-go | Status |
 |---|---|---|---|
-| **0. Setup** | Move `physfeat` from the `%%writefile` cells into a package (`pip install -e .`). Add face-physics module + synthetic tests. Install CUDA PyTorch locally. | Tests pass; `torch.cuda.is_available()` on the RTX 5050 | Package, `face.py`, tests: **done**. CUDA torch, MediaPipe: to do |
+| **0. Setup** | Move `physfeat` from the `%%writefile` cells into a package (`pip install -e .`). Add face-physics module + synthetic tests. Install CUDA PyTorch locally. | Tests pass; `torch.cuda.is_available()` on the RTX 5050 | **Done.** Checked on a real photo: half-to-half light angle 5° → 36° when one half is mirrored; 29 ms per face |
 | **1. Data + baseline** | Notebook 05a. Train real vs StyleGAN faces; test on unseen diffusion faces, face swaps, JPEG. Bias audit (resolution, format) as in nb01; crop, resize and re-encode every image identically. | **CLIP must leave headroom**: unseen AUC ≲ 0.95, or a clear JPEG drop. Otherwise choose harder test sets first. | To do |
 | **2. Face physics** | Notebook 05b: extract `physfeat.face` features. AUC per feature on unseen sets. Check against a real-face sanity test (e.g. the notebook-04 edits applied to face photos). | ≥ 1 feature with AUC > 0.6 on unseen sets | To do |
 | **3. Fusion + evaluation** | `RobustDetector` with JPEG augmentation; `protocol.bootstrap_mean_auc`. | **Pre-registered:** fused − CLIP mean unseen AUC, 95% CI excludes 0 | To do |
@@ -84,10 +84,14 @@ Because the success criterion is fixed in advance, a null result is still report
 
 ## Local setup
 
+Keep the virtual environment **outside OneDrive** (it is several GB). Current one: `C:\Users\super\venvs\physfake`, with torch 2.11 + CUDA 12.8 on the RTX 5050, mediapipe 1.1, gradio 6.30, transformers 5.19 and diffusers 0.41.
+
 ```bash
-python -m venv .venv
-.venv\Scripts\activate
+python -m venv C:\Users\super\venvs\physfake
+C:\Users\super\venvs\physfake\Scripts\activate
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128   # RTX 50-series needs CUDA 12.8+
 pip install -e ".[deep,face,demo,test]"
 python -m pytest
 ```
+
+On first use, `physfeat.face` downloads MediaPipe's `face_landmarker.task` (about 4 MB) to `~/.cache/physfeat`.

@@ -45,8 +45,11 @@ CROP_MARGIN = 0.05       # margin around the landmark bounding box (fraction of 
 SKIN_ERODE_FRAC = 0.03   # erode the face outline by this fraction of the crop (hair, silhouette)
 FEATURE_DILATE_FRAC = 0.02  # grow the eye / brow / lip masks by this fraction of the crop
 MIN_SKIN_PIX = 400       # skin pixels needed for the global fit (a quarter of this per half)
+SKIN_CHROMA_TOL = 0.03   # keep pixels whose rg-chromaticity is this close to the median skin colour
+SKIN_MIN_REL_LUM = 0.35  # ... and that are not darker than this fraction of the median skin brightness
 EYE_GRID = 48            # each iris disc is resampled to EYE_GRID x EYE_GRID
-MIN_IRIS_PX = 4.0        # iris radius (px, input image) below which eye features are NaN
+MIN_IRIS_PX = 5.0        # iris radius (px, input image) below which eye features are NaN
+HL_MAX_R = 0.8           # look for highlights only inside this radius (iris radii): avoids the sclera
 MIN_OPEN_FRAC = 0.3      # share of the iris disc that must be visible (not under the lids)
 HL_MIN_LUM = 0.6         # a corneal highlight is brighter than this (sRGB luminance) ...
 HL_REL = 0.25            # ... and brighter than the median iris luminance by this much
@@ -211,6 +214,19 @@ def skin_mask(L, shape):
     return (skin > 0) & (feats == 0)
 
 
+def skin_colour_gate(rgb, skin):
+    """Drop pixels inside the face outline that are not skin-coloured (hair over the forehead,
+    glasses, beards). Uses rg-chromaticity, which shading does not change for a Lambertian
+    surface, so shadowed skin is kept; a brightness floor removes near-black pixels."""
+    if skin.sum() < MIN_SKIN_PIX:
+        return skin
+    c = rgb.astype(np.float32) + 1.0
+    chrom = c[..., :2] / c.sum(-1, keepdims=True)
+    dist = np.linalg.norm(chrom - np.median(chrom[skin], 0), axis=-1)
+    lum = c.mean(-1)
+    return skin & (dist < SKIN_CHROMA_TOL) & (lum > SKIN_MIN_REL_LUM * np.median(lum[skin]))
+
+
 def midline(L):
     """Facial midline as x = a*y + b (pixels): robust to head roll."""
     a, b = np.polyfit(L[MIDLINE, 1], L[MIDLINE, 0], 1)
@@ -352,7 +368,8 @@ def eye_features(rgb, eyes, return_debug=False):
         lum, disc, vis, UV = _iris_patch(rgb, e["centre"], e["radius"], e.get("poly"))
         if vis.sum() < MIN_OPEN_FRAC * disc.sum():
             continue
-        hl = vis & (lum >= max(HL_MIN_LUM, float(np.median(lum[vis])) + HL_REL))
+        inner = UV[0] ** 2 + UV[1] ** 2 <= HL_MAX_R ** 2
+        hl = vis & inner & (lum >= max(HL_MIN_LUM, float(np.median(lum[vis])) + HL_REL))
         irr, ell = _pupil_irregularity(lum, vis, hl, UV)
         usable.append({"hl": hl, "irr": irr, "UV": UV})
         dbg.append({"lum": lum, "visible": vis, "hl": hl, "ellipse": ell})
@@ -421,7 +438,7 @@ def extract(rgb: np.ndarray, landmarks=None, mesher=None, return_debug=False):
                       interpolation=cv2.INTER_AREA if s < 1 else cv2.INTER_CUBIC)
     Lc = (L - [x0, y0, 0.0]) * s
     normals = mesh_normal_map(Lc, crop.shape)
-    skin = skin_mask(Lc, crop.shape)
+    skin = skin_colour_gate(crop, skin_mask(Lc, crop.shape))
     light_f, light_dbg = skin_lighting(crop, normals, skin, midline(Lc), return_debug=True)
     f.update(light_f)
 
