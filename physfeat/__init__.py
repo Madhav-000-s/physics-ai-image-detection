@@ -1,0 +1,1 @@
+"""physfeat — physics-based features for AI-generated image detection."""

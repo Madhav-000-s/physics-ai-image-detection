@@ -13,7 +13,21 @@ Computer-vision course project. Do physics cues help detect AI-generated images 
 | [03_compression_aware.ipynb](03_compression_aware.ipynb) | JPEG-augmented training for every model, quality-aware fusion, paired bootstrap CIs |
 | [04_lighting_violations.ipynb](04_lighting_violations.ipynb) | Controlled lighting violations on real photos (shift / mirror / rotate half) |
 
-Each notebook writes the shared `physfeat` feature-extraction package with `%%writefile`, so they run independently on Kaggle.
+Each notebook writes its own copy of the `physfeat` package with `%%writefile`, so it runs on Kaggle without extra setup.
+
+## Next phase: face deepfakes
+
+Physics didn't help on generic scenes because the geometry had to be guessed from a single image. The next phase moves to faces, where a 3D face mesh gives precise geometry. See **[PLAN.md](PLAN.md)** for details.
+
+| Path | Contents |
+|---|---|
+| [physfeat/](physfeat/) | The canonical feature package (merged from the notebooks), plus [physfeat/face.py](physfeat/face.py): skin lighting, corneal highlights, pupil shape, pose consistency |
+| [tests/](tests/) | Synthetic sanity tests (known-answer renders) |
+
+```bash
+pip install -e ".[deep,face,test]"   # on Kaggle: pip install --no-deps git+https://github.com/Madhav-000-s/physics-ai-image-detection
+python -m pytest
+```
 
 ## Running
 

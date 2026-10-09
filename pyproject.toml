@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "physfeat"
+version = "0.2.0"
+description = "Physics-based features (perspective, lighting, face physics) for AI-generated image detection"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "pandas",
+    "scipy",
+    "scikit-learn",
+    "opencv-python",
+    "pillow",
+    "pyarrow",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+deep = ["torch", "torchvision", "transformers", "diffusers"]   # CLIP + Marigold normals
+face = ["mediapipe"]                                            # face landmarks for physfeat.face
+demo = ["gradio", "mediapipe", "torch", "torchvision", "transformers"]
+test = ["pytest"]
+
+[tool.setuptools]
+packages = ["physfeat"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

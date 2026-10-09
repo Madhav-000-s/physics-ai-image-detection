@@ -5,3 +5,7 @@ work03/
 work04/
 __pycache__/
 .ipynb_checkpoints/
+*.egg-info/
+build/
+.venv/
+.pytest_cache/
