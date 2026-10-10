@@ -113,27 +113,53 @@ def ensure_model(path=None) -> Path:
     return p
 
 
+ZOOM_WINDOWS = (0.6, 0.4)   # fallback search windows, as fractions of the shorter image side
+
+
 class FaceMesher:
     """rgb (HxWx3 uint8) -> (478,3) landmarks in input pixels, or None if no face is found.
-    With several faces, the largest one is returned."""
+    With several faces, the largest one is returned.
 
-    def __init__(self, model_path=None, max_faces=4):
+    MediaPipe's detector is a short-range model and misses faces that fill only a small part of
+    the frame (e.g. a news anchor in a 720p video frame). If the full image yields no face,
+    overlapping zoomed-in windows are searched and the landmarks mapped back."""
+
+    def __init__(self, model_path=None, max_faces=4, zoom_fallback=True):
         import mediapipe as mp
         from mediapipe.tasks.python import BaseOptions, vision
         self._mp = mp
+        self.zoom_fallback = zoom_fallback
         opts = vision.FaceLandmarkerOptions(
             base_options=BaseOptions(model_asset_buffer=ensure_model(model_path).read_bytes()),
             running_mode=vision.RunningMode.IMAGE, num_faces=max_faces)
         self.landmarker = vision.FaceLandmarker.create_from_options(opts)
 
-    def __call__(self, rgb: np.ndarray):
+    def _detect(self, rgb):
         img = self._mp.Image(image_format=self._mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb[..., :3]))
-        faces = self.landmarker.detect(img).face_landmarks
-        if not faces:
-            return None
         h, w = rgb.shape[:2]
-        cands = [np.array([[p.x * w, p.y * h, p.z * w] for p in f], float) for f in faces]
-        return max(cands, key=lambda L: np.ptp(L[:, 0]) * np.ptp(L[:, 1]))
+        return [np.array([[p.x * w, p.y * h, p.z * w] for p in f], float)
+                for f in self.landmarker.detect(img).face_landmarks]
+
+    @staticmethod
+    def _area(L):
+        return np.ptp(L[:, 0]) * np.ptp(L[:, 1])
+
+    def __call__(self, rgb: np.ndarray):
+        cands = self._detect(rgb)
+        if not cands and self.zoom_fallback:
+            h, w = rgb.shape[:2]
+            for frac in ZOOM_WINDOWS:
+                side = int(frac * min(h, w))
+                if side < 64:
+                    break
+                step = side // 2
+                for y0 in sorted({*range(0, h - side + 1, step), h - side}):
+                    for x0 in sorted({*range(0, w - side + 1, step), w - side}):
+                        for L in self._detect(rgb[y0:y0 + side, x0:x0 + side]):
+                            cands.append(L + [x0, y0, 0.0])   # z is already in pixels of the window = image pixels
+                if cands:
+                    break
+        return max(cands, key=self._area) if cands else None
 
 
 _MESHER = None
@@ -158,12 +184,20 @@ def crop_box(L, shape, margin=CROP_MARGIN):
 
 
 def face_crop(rgb, L, size=224, margin=0.3) -> np.ndarray:
-    """Square crop centred on the face (for the CLIP branch), resized to size x size."""
+    """Square crop centred on the face, resized to size x size (never stretched).
+    The margin shrinks if the face is near the image border; only if even the bare face does
+    not fit is the image extended by edge replication."""
     (x0, y0), (x1, y1) = L[:, :2].min(0), L[:, :2].max(0)
-    c, half = (np.array([x0 + x1, y0 + y1]) / 2), (1 + margin) * max(x1 - x0, y1 - y0) / 2
+    c = np.array([x0 + x1, y0 + y1]) / 2
+    face_half = max(x1 - x0, y1 - y0) / 2
     h, w = rgb.shape[:2]
-    a = np.clip(np.round(c - half), 0, [w, h]).astype(int)
-    b = np.clip(np.round(c + half), 0, [w, h]).astype(int)
+    room = min(c[0], w - c[0], c[1], h - c[1])
+    half = max(face_half, min((1 + margin) * face_half, room))
+    a, b = np.round(c - half).astype(int), np.round(c + half).astype(int)
+    pad = int(max(0, -a.min(), b[0] - w, b[1] - h))
+    if pad:
+        rgb = cv2.copyMakeBorder(rgb, pad, pad, pad, pad, cv2.BORDER_REPLICATE)
+        a, b = a + pad, b + pad
     crop = rgb[a[1]:b[1], a[0]:b[0]]
     return cv2.resize(crop, (size, size), interpolation=cv2.INTER_AREA if crop.shape[0] > size else cv2.INTER_CUBIC)
 

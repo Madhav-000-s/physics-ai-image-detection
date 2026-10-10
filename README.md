@@ -21,8 +21,9 @@ Physics didn't help on generic scenes because the geometry had to be guessed fro
 
 | Path | Contents |
 |---|---|
-| [physfeat/](physfeat/) | The canonical feature package (merged from the notebooks), plus [physfeat/face.py](physfeat/face.py): skin lighting, corneal highlights, pupil shape, pose consistency |
-| [tests/](tests/) | Synthetic sanity tests (known-answer renders) |
+| [05_face_deepfakes.ipynb](05_face_deepfakes.ipynb) | Faces: train on StyleGAN, test on unseen GAN / face-swap / diffusion / inpainting sets; CLIP vs face physics vs fused, with the pre-registered bootstrap test. Built from [notebooks_src/05_face_deepfakes.py](notebooks_src/05_face_deepfakes.py) with `python tools/py2nb.py` |
+| [physfeat/](physfeat/) | The canonical feature package (merged from the notebooks), plus [face.py](physfeat/face.py) (skin lighting, corneal highlights, pupil shape, pose consistency) and [facedata.py](physfeat/facedata.py) (face datasets, DiffusionFace streaming, paired test sets) |
+| [tests/](tests/) | Synthetic known-answer tests for the face features, data handling and evaluation |
 
 ```bash
 pip install -e ".[deep,face,test]"   # on Kaggle: pip install --no-deps git+https://github.com/Madhav-000-s/physics-ai-image-detection

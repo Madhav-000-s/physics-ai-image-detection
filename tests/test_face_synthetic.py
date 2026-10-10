@@ -126,6 +126,21 @@ def test_skin_gate_drops_hair_keeps_shadow():
     assert gated[shadow].mean() > 0.9                 # shadowed skin kept (chromaticity ignores shading)
 
 
+def test_face_crop_is_never_stretched():
+    """A face against the image border: the crop must stay square (margin shrinks or the
+    border is replicated) instead of being clipped and stretched."""
+    img = np.zeros((300, 400, 3), np.uint8)
+    cv2.circle(img, (42, 150), 40, (255, 255, 255), -1)       # round "face" 2 px from the left edge
+    t = np.linspace(0, 2 * np.pi, F.N_MESH + 10)
+    L = np.c_[42 + 40 * np.cos(t), 150 + 40 * np.sin(t), np.zeros_like(t)]
+    for margin in (0.0, 0.3, 1.0):
+        crop = F.face_crop(img, L, size=128, margin=margin)
+        assert crop.shape == (128, 128, 3)
+        ys, xs = np.nonzero(crop[..., 0] > 128)
+        w, h = np.ptp(xs) + 1, np.ptp(ys) + 1
+        assert abs(w / h - 1) < 0.08, (margin, w, h)          # still a circle, not an ellipse
+
+
 def test_small_iris_is_nan():
     img, eyes = _eye_image([(0.4, -0.4)] * 2)
     for e in eyes:

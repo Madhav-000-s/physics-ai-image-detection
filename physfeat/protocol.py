@@ -115,3 +115,71 @@ def bootstrap_mean_auc(scores: dict, df: pd.DataFrame, train_gen: str, pairs, n_
         diffs[f"{a}  minus  {b}"] = [point[a] - point[b], float(d.quantile(.025)), float(d.quantile(.975)),
                                     float((d <= 0).mean())]
     return models, diffs
+
+# ----------------------------------------------------------------------------------------
+# Test sets with their own reals (notebook 05: face datasets)
+# ----------------------------------------------------------------------------------------
+# sets: name -> {"real": positional idx, "fake": positional idx, "family": str, "seen": bool}
+# (built by facedata.test_sets). Each fake set is scored against the reals it is paired with.
+
+def evaluate_sets(scores: dict, sets: dict) -> pd.DataFrame:
+    rows = []
+    for name, s in sets.items():
+        idx = np.r_[s["real"], s["fake"]]
+        y = np.r_[np.zeros(len(s["real"])), np.ones(len(s["fake"]))]
+        for model, sc in scores.items():
+            p = np.asarray(sc)[idx]
+            rows.append({"test_set": name, "family": s["family"], "seen": s["seen"], "model": model,
+                         "auc": roc_auc_score(y, p), "bal_acc": balanced_accuracy_score(y, p > 0.5),
+                         "n_fake": len(s["fake"]), "n_real": len(s["real"])})
+    return pd.DataFrame(rows)
+
+
+def summary_sets(res: pd.DataFrame, metric="auc", models=None) -> pd.DataFrame:
+    """Rows: every test set, then the mean of each unseen family, then MEAN (unseen sets)."""
+    t = res.pivot_table(index=["seen", "family", "test_set"], columns="model", values=metric)
+    t = t.sort_index(level=[0, 1, 2], ascending=[False, True, True])
+    unseen = t.xs(False, level="seen") if False in t.index.get_level_values(0) else t.iloc[:0]
+    out = t.droplevel([0, 1])
+    for fam, g in unseen.groupby(level="family"):
+        out.loc[f"MEAN {fam}"] = g.mean()
+    out.loc["MEAN (unseen sets)"] = unseen.mean()
+    return out[models] if models else out
+
+
+def bootstrap_sets(scores: dict, sets: dict, pairs, n_boot=500, seed=0):
+    """Paired bootstrap of the mean AUC over unseen test sets. Real images shared by several
+    sets (same real pool) are resampled once per replicate, fakes per set. Returns per-model
+    [mean, lo, hi] and per-pair difference [mean, lo, hi, P(diff<=0)], like bootstrap_mean_auc."""
+    rng = np.random.default_rng(seed)
+    unseen = {k: v for k, v in sets.items() if not v["seen"]}
+    pools = {}
+    for k, v in unseen.items():
+        pools.setdefault(v["real"].tobytes(), v["real"])
+    names = list(scores)
+    S = {k: np.asarray(v) for k, v in scores.items()}
+
+    def mean_auc(real_draw, fake_draw):
+        out = {k: [] for k in names}
+        for k, v in unseen.items():
+            ri, fi = real_draw[v["real"].tobytes()], fake_draw[k]
+            idx = np.r_[ri, fi]
+            yy = np.r_[np.zeros(len(ri)), np.ones(len(fi))]
+            for m in names:
+                out[m].append(roc_auc_score(yy, S[m][idx]))
+        return {m: float(np.mean(v)) for m, v in out.items()}
+
+    point = mean_auc(pools, {k: v["fake"] for k, v in unseen.items()})
+    boots = []
+    for _ in range(n_boot):
+        rd = {key: rng.choice(p, len(p)) for key, p in pools.items()}
+        fd = {k: rng.choice(v["fake"], len(v["fake"])) for k, v in unseen.items()}
+        boots.append(mean_auc(rd, fd))
+    B = pd.DataFrame(boots)
+    models = {m: [point[m], float(B[m].quantile(.025)), float(B[m].quantile(.975))] for m in names}
+    diffs = {}
+    for a, b in pairs:
+        d = B[a] - B[b]
+        diffs[f"{a}  minus  {b}"] = [point[a] - point[b], float(d.quantile(.025)), float(d.quantile(.975)),
+                                    float((d <= 0).mean())]
+    return models, diffs

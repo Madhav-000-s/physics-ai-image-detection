@@ -41,21 +41,21 @@ Optional later addition: **face vs. background lighting.** Use Marigold normals 
 | Phase | Work | Go / no-go | Status |
 |---|---|---|---|
 | **0. Setup** | Move `physfeat` from the `%%writefile` cells into a package (`pip install -e .`). Add face-physics module + synthetic tests. Install CUDA PyTorch locally. | Tests pass; `torch.cuda.is_available()` on the RTX 5050 | **Done.** Checked on a real photo: half-to-half light angle 5° → 36° when one half is mirrored; 29 ms per face |
-| **1. Data + baseline** | Notebook 05a. Train real vs StyleGAN faces; test on unseen diffusion faces, face swaps, JPEG. Bias audit (resolution, format) as in nb01; crop, resize and re-encode every image identically. | **CLIP must leave headroom**: unseen AUC ≲ 0.95, or a clear JPEG drop. Otherwise choose harder test sets first. | To do |
-| **2. Face physics** | Notebook 05b: extract `physfeat.face` features. AUC per feature on unseen sets. Check against a real-face sanity test (e.g. the notebook-04 edits applied to face photos). | ≥ 1 feature with AUC > 0.6 on unseen sets | To do |
-| **3. Fusion + evaluation** | `RobustDetector` with JPEG augmentation; `protocol.bootstrap_mean_auc`. | **Pre-registered:** fused − CLIP mean unseen AUC, 95% CI excludes 0 | To do |
+| **1. Data + baseline** | [Notebook 05](05_face_deepfakes.ipynb), sections 2–4: train real vs StyleGAN faces; test on unseen GAN, face-swap, diffusion and inpainting sets. Canonical crops for every image; shortcut audit. | **CLIP must leave headroom**: unseen AUC ≲ 0.95, or a clear JPEG drop. The notebook prints this check. | **Notebook ready**, dry-run locally end to end. To do: run on Kaggle |
+| **2. Face physics** | Notebook 05, sections 5 and 8: `physfeat.face` features, how often each is defined per set, and per-feature AUC per family (direction fixed on training data). | ≥ 1 feature with AUC > 0.6 on unseen sets | Same run |
+| **3. Fusion + evaluation** | Notebook 05, sections 6–7: `RobustDetector` with JPEG augmentation; `protocol.bootstrap_sets` (each fake set against its own reals). | **Pre-registered:** fused − CLIP mean unseen AUC, 95% CI excludes 0. The notebook prints the verdict. | Same run |
 | **4. Demo** | Gradio app (below) | — | To do |
 
 ## Data
 
 All of these are free to download; licenses must be checked before redistributing anything.
 
-- **Train (seen):** [140k Real and Fake Faces](https://www.kaggle.com/datasets/xhlulu/140k-real-and-fake-faces): FFHQ reals vs StyleGAN fakes.
-- **Test (unseen):**
-  - Diffusion faces: [DiffusionFace](https://github.com/Rapisurazurite/DiffFace) (Zenodo, no access form; 11 diffusion models including inpainting and swaps) and Kaggle `selfishgene/synthetic-faces-high-quality-sfhq-part-1`.
-  - StyleGAN3: Kaggle `troykueh/real-vs-fake-faces-stylegan3`.
-  - Face swaps: FF++ frame mirrors on Kaggle (`adham7elmy/faceforencispp-extracted-frames`, `xdxd003/ff-c23`). These are unofficial with unclear licenses; say so in the report.
-  - [DiFF](https://github.com/xaCheng1996/DiFF): the fakes download directly, but the reals need a form.
+- **Train (seen):** [140k Real and Fake Faces](https://www.kaggle.com/datasets/xhlulu/140k-real-and-fake-faces): FFHQ reals vs StyleGAN fakes, 256 px JPEG.
+- **Test (unseen).** Each fake set is scored against reals from its own source:
+  - **Diffusion, face swap, inpainting:** [DiffusionFace](https://github.com/Rapisurazurite/DiffFace) (Zenodo [part 1](https://zenodo.org/records/10865300) / [part 2](https://zenodo.org/records/10865065), CC BY 4.0, no access form). It has one ~3 GB tar per method, including `Real.tar`. The notebook streams only the first ~800 images of each archive. Methods: ADM, DDIM, LDM, PNDM, SD 1.5 / 2.1 img2img and text2img, MM_CelebA, **DiffSwap**, **Inpaint**.
+  - **Face swap / reenactment:** FF++ frames on Kaggle (`adham7elmy/faceforencispp-extracted-frames`): Deepfakes, Face2Face, FaceSwap, FaceShifter, NeuralTextures, plus real frames. Unofficial mirror with unclear licensing; say so in the report. Faces are often small in these frames, so `FaceMesher` searches zoomed windows when the full frame yields no face.
+  - **GAN, different content:** SFHQ part 1 (`selfishgene/synthetic-faces-high-quality-sfhq-part-1`). *Correction to earlier research:* this is **StyleGAN2** (paintings and 3D models encoded into StyleGAN2), not diffusion. It has no reals, so it uses the 140k test reals.
+  - Not used: StyleGAN3 (`troykueh/real-vs-fake-faces-stylegan3`), and [DiFF](https://github.com/xaCheng1996/DiFF), whose reals need a form.
 - **Fallback (partial edits):** [TGIF](https://github.com/IDLabMedia/tgif-dataset) (inpainting with masks: SD2, SDXL, Firefly, FLUX; CC BY-SA).
 
 **Shortcut guard:** real and fake images come from different sources with different resolution and compression. Every image goes through the same pipeline: face crop → fixed size → JPEG q96. Re-run the nb01 metadata-only audit on the result and report its AUC.
