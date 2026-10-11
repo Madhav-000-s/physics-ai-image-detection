@@ -425,6 +425,7 @@ joblib.dump({"detector": det, "phys_cols": PHYS_COLS, "clip_model": CLIP_MODEL,
              "train_data": "140k Real and Fake Faces (FFHQ vs StyleGAN)", "physfeat_commit": PKG_COMMIT},
             MODEL_DIR / "face_detector.joblib")
 res.to_csv(OUT_DIR / "results_faces.csv", index=False)
+df[["path", "source", "method", "label", "split", "group", "crop"]].to_csv(OUT_DIR / "manifest_faces.csv", index=False)
 diff_tab.to_csv(OUT_DIR / "bootstrap_diffs_faces.csv", index=False)
 feat_auc.to_csv(OUT_DIR / "feature_auc_faces.csv")
 audit.to_csv(OUT_DIR / "shortcut_audit_faces.csv")

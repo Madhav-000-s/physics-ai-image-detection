@@ -41,10 +41,10 @@ Optional later addition: **face vs. background lighting.** Use Marigold normals 
 | Phase | Work | Go / no-go | Status |
 |---|---|---|---|
 | **0. Setup** | Move `physfeat` from the `%%writefile` cells into a package (`pip install -e .`). Add face-physics module + synthetic tests. Install CUDA PyTorch locally. | Tests pass; `torch.cuda.is_available()` on the RTX 5050 | **Done.** Checked on a real photo: half-to-half light angle 5° → 36° when one half is mirrored; 29 ms per face |
-| **1. Data + baseline** | [Notebook 05](05_face_deepfakes.ipynb), sections 2–4: train real vs StyleGAN faces; test on unseen GAN, face-swap, diffusion and inpainting sets. Canonical crops for every image; shortcut audit. | **CLIP must leave headroom**: unseen AUC ≲ 0.95, or a clear JPEG drop. The notebook prints this check. | **Notebook ready**, dry-run locally end to end. To do: run on Kaggle |
-| **2. Face physics** | Notebook 05, sections 5 and 8: `physfeat.face` features, how often each is defined per set, and per-feature AUC per family (direction fixed on training data). | ≥ 1 feature with AUC > 0.6 on unseen sets | Same run |
-| **3. Fusion + evaluation** | Notebook 05, sections 6–7: `RobustDetector` with JPEG augmentation; `protocol.bootstrap_sets` (each fake set against its own reals). | **Pre-registered:** fused − CLIP mean unseen AUC, 95% CI excludes 0. The notebook prints the verdict. | Same run |
-| **4. Demo** | Gradio app (below) | — | To do |
+| **1. Data + baseline** | [Notebook 05](05_face_deepfakes.ipynb), sections 2–4: train real vs StyleGAN faces; test on unseen GAN, face-swap, diffusion and inpainting sets. Canonical crops for every image; shortcut audit. | **CLIP must leave headroom**: unseen AUC ≲ 0.95, or a clear JPEG drop. The notebook prints this check. | **Done** (Kaggle run `CV_nb5`): CLIP 0.69 on unseen sets, so there is ample headroom |
+| **2. Face physics** | Notebook 05, sections 5 and 8: `physfeat.face` features, how often each is defined per set, and per-feature AUC per family (direction fixed on training data). | ≥ 1 feature with AUC > 0.6 on unseen sets | **Done:** corneal-highlight features 0.61–0.66 on diffusion face swaps; learned physics 0.55 overall |
+| **3. Fusion + evaluation** | Notebook 05, sections 6–7: `RobustDetector` with JPEG augmentation; `protocol.bootstrap_sets` (each fake set against its own reals). | **Pre-registered:** fused − CLIP mean unseen AUC, 95% CI excludes 0. The notebook prints the verdict. | **Done:** met but negligible (+0.0016). Notebook 06 (leave one family out, physics prior, +0.01 effect-size bar): no useful gain. See RESULTS.md |
+| **4. Demo** | Gradio app (below) | — | **Done:** `python demo/app.py`; physics used as explanation |
 
 ## Data
 

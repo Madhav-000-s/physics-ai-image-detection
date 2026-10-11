@@ -1,6 +1,6 @@
 # Physics-Based AI-Generated Image Detection — Results
 
-CV course project · results of notebooks 01–04 (Kaggle, Tesla T4)
+CV course project · results of notebooks 01–06 (01–05 on Kaggle, Tesla T4; 06 locally on notebook 05's features)
 
 ## TL;DR
 
@@ -10,8 +10,10 @@ CV course project · results of notebooks 01–04 (Kaggle, Tesla T4)
 | Are physics features **robust to compression**? | **Yes.** JPEG q50 costs them 0.008 AUC, against 0.186 for CLIP. |
 | Does that robustness make the **fused detector** better under compression? | **No.** Training CLIP with JPEG augmentation recovers +0.171 AUC at q50. After that, physics adds +0.0002 (95% CI includes 0). |
 | Do the lighting features **measure lighting** on real photos? | **Yes, weakly.** They respond to introduced lighting violations beyond what editing seams cause (AUC ≈ 0.56–0.57 vs a seam-only control, p < 0.005). CLIP does not respond to lighting specifically. |
+| On **faces**, where a 3D face mesh gives precise geometry, does physics help? (nb05, trained on StyleGAN) | **Statistically yes, practically no.** Fused − CLIP = +0.0016 AUC (95% CI [+0.0008, +0.0023]) over 16 unseen test sets, despite ample headroom (CLIP 0.69). |
+| Does it help when training covers several kinds of fakes? (nb06, leave one family out) | **No.** +0.0011 [+0.0002, +0.0019] on clean images; the CI includes 0 at JPEG q50. A training-free physics prior is at chance (0.50). Training diversity, not physics, lifts CLIP (0.69 → 0.75 on unseen families; 0.86 when every family is seen). |
 
-**Bottom line:** a rigorous negative result for fully generated images on GenImage, with one positive controlled finding. The lighting-consistency features capture a real physical signal that CLIP lacks, but monocular surface-normal estimation is too imprecise for it to help detect generated images.
+**Bottom line:** a rigorous negative result, now in two domains. On GenImage scenes and on faces (GAN, diffusion, face swap, reenactment, inpainting), physics cues do not measurably improve a CLIP detector, even where the geometry is precise and CLIP leaves headroom. One positive controlled finding remains: the lighting features capture a real physical signal that CLIP lacks. The final demo uses physics to **explain** each verdict, not to score it.
 
 ---
 
@@ -292,12 +294,71 @@ All inputs are **real** photos. An AUC below 0.5 means the edited versions were 
 
 ---
 
+## Notebook 05 — Faces: CLIP vs face physics (trained on StyleGAN)
+
+**Why faces:** notebooks 01–04 blamed imprecise monocular normals. A MediaPipe 3D face mesh gives precise face geometry, and published face cues (corneal highlights, pupil shape, head pose, 3D-face lighting) report AUC 0.9+ on GAN faces.
+
+**Design**
+- Train: FFHQ reals vs StyleGAN fakes (140k Real and Fake Faces), 10k per class; clean + JPEG-augmented copies.
+- Test: 16 unseen sets, each fake set scored against reals from its own source:
+  - SFHQ (StyleGAN2)
+  - FF++: Deepfakes, Face2Face, FaceSwap, FaceShifter, NeuralTextures
+  - DiffusionFace: ADM, DDIM, LDM, PNDM, SD 1.5 / 2.1 img2img and text2img, DiffSwap, Inpaint
+- Every image: face mesh → square crop (margin 0.3) → 256 px → JPEG q95. Faces were found in 99–100% of the images from every source.
+- Physics branch (`physfeat/face.py`, 20 features): skin lighting from mesh normals (one light; agreement between the two face halves), corneal-highlight consistency, pupil shape, and pose agreement between the inner face and the outline.
+- Pre-registered criterion: fused − CLIP mean unseen AUC, paired bootstrap 95% CI excludes 0.
+
+**Mean AUC over unseen sets**
+
+| Model | Clean | JPEG q75 | JPEG q50 |
+|---|---:|---:|---:|
+| CLIP (JPEG-aug) | 0.692 | 0.680 | 0.677 |
+| Physics (JPEG-aug) | 0.548 | 0.547 | 0.544 |
+| Fused (quality-aware) | 0.693 | 0.681 | 0.678 |
+| **Fused − CLIP** [95% CI] | **+0.0016** [+0.0008, +0.0023] | +0.0015 [+0.0007, +0.0022] | +0.0012 [+0.0003, +0.0020] |
+
+**Findings**
+- **The criterion is met, but the effect is negligible.** In hindsight the pre-registration should have included a minimum effect size; notebook 06 adds +0.01 AUC.
+- **There is plenty of headroom.** CLIP generalises poorly from StyleGAN (0.69) and is *inverted* on SD text-to-image faces (0.40 / 0.35). Physics beats CLIP on those two sets (0.60 / 0.53), but a fusion trained where CLIP is near-perfect barely uses physics (weights 1.33 vs 0.35).
+- **The most physical signal** is in the corneal-highlight features on diffusion face swaps (AUC 0.61–0.66).
+- **Confounds:** SFHQ can be separated from its reals by original-file metadata (AUC 1.0) and by crop statistics (0.88). Several DiffusionFace sets differ from their reals in low-level statistics (0.83–0.87).
+
+## Notebook 06 — Leave one family out, physics prior, demo model
+
+**Design**
+- Reuses notebook 05's features. Every test set is split in half (by video for FF++), and the test halves are never trained on.
+- Leave-one-family-out (LOFO) over GAN, diffusion, face swap (DiffSwap), face swap / reenactment (FF++) and inpainting.
+- Adds a **training-free physics prior**: physics-signed z-scores, with directions fixed in `physfeat/face.py` before notebook 05 ran.
+- Criterion: CI excludes 0 **and** the gain is at least +0.01 AUC.
+
+**Mean AUC over held-out sets**
+
+| Model | LOFO (clean) | LOFO, JPEG q50 | Demo model (all families seen) |
+|---|---:|---:|---:|
+| CLIP | 0.748 | 0.741 | 0.857 |
+| Physics (learned) | 0.559 | 0.559 | 0.579 |
+| Physics prior (no training) | 0.503 | 0.505 | 0.503 |
+| Fused (CLIP + learned physics) | 0.749 | 0.742 | 0.858 |
+| **Fused − CLIP** [95% CI] | +0.0011 [+0.0002, +0.0019] | +0.0011 [−0.0002, +0.0022] | +0.0005 [−0.0002, +0.0013] |
+
+**Findings**
+- **Physics adds no practically useful accuracy in any setting.** The largest gain anywhere is +0.0016, against a threshold of +0.01.
+- **The physics prior is at chance on average.** The physically expected directions hold on FF++ Deepfakes and FaceSwap (0.65 / 0.60) but are *reversed* on GAN faces (0.42–0.48): by these measures, StyleGAN faces are more physically consistent than real photos. Physics flags different kinds of fake in opposite directions, so no fixed rule transfers, and neither does a rule learned on one generator.
+- **Training diversity is what helps.** CLIP on an unseen family rises from 0.69 (StyleGAN only) to 0.75 (four families). The all-families demo model reaches 0.86 mean AUC on held-out images; its weakest sets are NeuralTextures (0.60), Inpaint (0.70) and Face2Face (0.71).
+- **The physics measurements are noisy even on real photos.** The median left/right light-direction disagreement is 45°. Eye reflections are measurable on 42% of real faces, pupils on only 4%.
+
+**Demo** (`demo/app.py`) uses the all-families model. It reports P(fake) from CLIP, physics and the fused detector, and explains each face with eight physics checks. Each check is compared with about 14k real face photos and flagged when fewer than 5% of real faces are as extreme.
+
+---
+
 ## Overall conclusions
 
 1. **Main result (negative):** monocular-physics features (perspective geometry + lighting consistency) do not improve cross-generator detection of fully generated images on GenImage, clean or compressed, once the baseline is trained fairly.
 2. **Robustness is not usefulness:** physics features are compression-invariant, but simple JPEG augmentation gives CLIP the same robustness, with far higher discriminative power (0.957 vs 0.675 AUC at q50).
 3. **Positive controlled finding:** the lighting features measure a real physical property (lighting consistency) that CLIP does not, but their sensitivity is limited by monocular normal estimation.
-4. **Implication / future work:** physics cues may matter more for **partially manipulated real photos** (splicing, relighting, composites) than for fully generated images, and they need more precise geometry (better normal estimators, multi-view input, or explicit object segmentation).
+4. **Faces do not rescue physics (nb05–06):** even with precise face geometry, physics adds at most +0.0016 AUC to CLIP across GAN, diffusion, face-swap, reenactment and inpainting fakes, and nothing measurable in the all-families model. Physics cues point in opposite directions for different generators: GAN faces look *more* physically consistent than real photos.
+5. **What improves detection is training diversity**, not physics: CLIP on an unseen family of fakes goes from 0.69 to 0.75 with four families in training.
+6. **Implication / future work:** physics remains useful as *explanation* (the demo). It may matter for targeted, localised manipulations (relighting, splicing) or with much better geometry (3DMM fitting at full resolution, multi-view input).
 
 ## Limitations
 
@@ -306,3 +367,9 @@ All inputs are **real** photos. An AUC below 0.5 means the edited versions were 
 - Physics features depend on a single normal estimator (Marigold at 512 px, default steps).
 - The controlled violations are synthetic edits of real photos, not real-world composites.
 - Geometry features are uninformative on scenes without man-made structure, which is most of this dataset.
+- Faces (nb05–06):
+  - 256 px crops leave irises only ~8 px in radius, so the eye cues are often unmeasurable.
+  - The MediaPipe mesh is a regression with a face prior, and may smooth over the inconsistencies being measured.
+  - FF++ frames come from an unofficial mirror.
+  - SFHQ and several DiffusionFace sets differ from their reals in ways other than fakeness.
+  - One training seed: the bootstrap covers test sampling, not training variance.

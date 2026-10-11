@@ -9,3 +9,7 @@ __pycache__/
 build/
 .venv/
 .pytest_cache/
+
+# demo example crops come from datasets that may not be redistributed (FFHQ, FF++)
+demo/examples/
+.claude/
